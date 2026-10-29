@@ -1,6 +1,8 @@
 name: Build APK
 on:
   workflow_dispatch:
+  push:
+    branches: ["main"]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,26 +15,20 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Make gradlew executable
+        working-directory: "."
+        run: chmod +x ./gradlew
       - name: Build Debug APK
         working-directory: "."
-        run: |
-          if [ -f gradlew ]; then chmod +x gradlew; ./gradlew assembleDebug --no-daemon; else gradle assembleDebug --no-daemon; fi
-      - name: Save APK in the APK folder
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          rm -rf /tmp/apks && mkdir -p /tmp/apks
-          find . -type f -name "*.apk" -not -path "./APK/*" -not -path "./.git/*" -exec cp {} /tmp/apks/ \;
-          ls /tmp/apks/*.apk
-          mkdir -p APK
-          cp /tmp/apks/*.apk APK/
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f APK
-          git commit -m "Add built APK [skip ci]" || echo "Nothing new to commit"
-          git pull --rebase origin "main" || true
-          git push origin "HEAD:refs/heads/main"
+        run: ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: "app-debug"
-          path: "APK/*.apk"
-          if-no-files-found: warn
+          path: "app/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "build-${{ github.run_number }}"
+          name: "Build ${{ github.run_number }}"
+          files: "app/build/outputs/apk/debug/*.apk"
